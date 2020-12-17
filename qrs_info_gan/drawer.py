@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import os
 
 
 def draw(y, number=0):
@@ -11,8 +12,9 @@ def draw(y, number=0):
 
 
 class Drawer:
-    def __init__(self, figures=1):
+    def __init__(self, figures, date):
         self.fig = plt.figure()
+        self.date = date
         self.count = 0
         self.figures = figures
         self.axs = []
@@ -30,8 +32,20 @@ class Drawer:
 
 
     def show(self):
+        #self.makeDir()
+        #self.fig.savefig(f'D:/Projects/qrs_info_gan/graphs/{self.strDate}/graph.pdf')
         plt.show()
 
 
     def save(self):
-        self.fig.savefig('D:/Projects/qrs_info_gan/graphs/graph.pdf')
+        self.makeDir()
+        self.fig.savefig(f'D:/Projects/qrs_info_gan/graphs/{self.strDate}/graph.pdf')
+
+
+    def makeDir(self):
+        os.chdir("graphs")
+        self.strDate = str(f"{self.date.year}-{self.date.month}-{self.date.day}--{self.date.hour}-{self.date.minute}-{self.date.second}")
+        os.mkdir(self.strDate)
+
+
+

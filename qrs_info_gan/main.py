@@ -6,7 +6,10 @@ import drawer
 import qrs_info_gan
 import math
 import numpy as np
+import datetime
 
+
+now = datetime.datetime.now()
 
 def saveModel(model, name):
     torch.save(model.state_dict(), f"D:/Projects/qrs_info_gan/model/{name}.pt")
@@ -29,21 +32,23 @@ if torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 
-    
-discriminator = qrs_info_gan.Discriminator()
-generator = qrs_info_gan.Generator()
 
-radius=32
-lr = 0.001
-num_epochs = 10
-loss_function = nn.BCELoss()
 entry = 8
+radius = 64
+
+discriminator = qrs_info_gan.Discriminator(radius)
+generator = qrs_info_gan.Generator(entry, radius)
+
+lr = 0.001
+num_epochs = 20
+loss_function = nn.BCELoss()
+
 
 optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=lr)
 optimizer_generator = torch.optim.Adam(generator.parameters(), lr=lr)
 
 batch_size = 1
-dataset = data_loader.QrsDataset()
+dataset = data_loader.QrsDataset(radius)
 train_loader = torch.utils.data.DataLoader(
     dataset, batch_size=batch_size, shuffle=True)
 
@@ -83,7 +88,7 @@ print("success")
 saveModel(generator, "generator")
 saveModel(discriminator, "discriminator")
 
-drr = drawer.Drawer(3)
+drr = drawer.Drawer(4, now)
 
 signal = dataset.getTestCenter()
 drr.add(signal)
@@ -93,18 +98,7 @@ outputData = generator(inputData)
 outputData = outputData.detach().numpy()
 drr.add(outputData)
 
-
-inputData = torch.zeros(entry)
-inputData[0] = 1000
-inputData[1] = -500
-inputData[2] = 100
-inputData[3] = 1
-
-outputData = generator(inputData)
-outputData = outputData.detach().numpy()
-drr.add(outputData)
-
-"""testSignal = dataset.getTestSignal()
+testSignal = dataset.getTestSignal()
 drr.add(testSignal)
 
 result = []
@@ -113,9 +107,14 @@ for i in range(radius, 5000-radius-1):
     signal = torch.from_numpy(signal)
     tempResult = discriminator(signal)
     tempResult = tempResult.detach().numpy()
+    if tempResult[0] == 1:
+        res = 1
+    else:
+        res = 0
     result.append(tempResult[0])
 
 
-drr.add(result)"""
+drr.add(result)
 
-drr.show()
+#drr.show()
+drr.save()
