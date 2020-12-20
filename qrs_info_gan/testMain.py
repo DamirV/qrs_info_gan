@@ -8,24 +8,39 @@ import math
 import numpy as np
 import datetime
 
-radius = 32
-
+radius = 16
 dataset = data_loader.QrsDataset(radius)
-
-train_loader = torch.utils.data.DataLoader(
-    dataset, batch_size=1, shuffle=True)
-
+model = qrs_info_gan.Discriminator(radius)
 now = datetime.datetime.now()
 
-drr = drawer.Drawer(5, now)
+def cutSignal(signal, start, radius):
+    signal = signal[start-radius:start+radius+1]
+    return signal
 
-for epoch in range(1):
-    for i, (real_samples, _) in enumerate(train_loader):
-        a = real_samples[0]
-        a = a.detach().numpy()
-        print(a)
-        drr.add(a)
-        if i == 5:
-            break
 
+model.load_state_dict(torch.load("D:\Projects\qrs_info_gan\model\discriminator.pt"))
+model.eval()
+
+drr = drawer.Drawer(2, now)
+
+testSignal = dataset.getTestSignal()
+drr.add(testSignal)
+
+result = []
+for i in range(radius, 5000-radius-1):
+    signal = cutSignal(testSignal, i, radius)
+    signal = torch.from_numpy(signal)
+    tempResult = model(signal)
+    tempResult = tempResult.detach().numpy()
+    result.append(tempResult[0])
+
+
+drr.add(result)
+
+drr.save()
 drr.show()
+
+
+
+
+

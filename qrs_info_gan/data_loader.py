@@ -13,6 +13,13 @@ class QrsDataset(Dataset):
         self.testValue = self.data[goodECG]
         del self.data[goodECG]
         self.radius = radius
+        self.len = 0
+        for key in self.data:
+            self.len += len(self.data[key]['Leads']['i']['Delineation']['qrs'])
+
+        self.keys = list(self.data.keys())
+        self.keyIter = 0
+        self.delIter = 0
 
 
     def load_data(self):
@@ -27,33 +34,32 @@ class QrsDataset(Dataset):
 
 
     def __getitem__(self, id):
-        key, value = random.choice(list(self.data.items()))
-        signal = value['Leads']['i']['Signal']
 
-        deliniation = value['Leads']['i']['Delineation']['qrs']
-        randomFlag = random.randint(0, 1)
-        randomFlag = 1 # for gan
+        signal = self.data[self.keys[self.keyIter]]['Leads']['i']['Signal']
+        deliniation = self.data[self.keys[self.keyIter]]['Leads']['i']['Delineation']['qrs']
 
-        if(randomFlag == 1):
-            isqrs = 1
-            center = random.choice(deliniation)[1]
-        else:
-            isqrs = 0
-            center = self.randCenter(deliniation, signal)
+        isqrs = 1
+        center = deliniation[self.delIter][1]
 
         signal = signal[center - self.radius:center + self.radius + 1]
-
         signal = np.asarray(signal, dtype=np.float32)
         isqrs = np.asarray(isqrs, dtype=np.float32)
 
         signal = torch.from_numpy(signal)
         isqrs = torch.from_numpy(isqrs)
 
+        self.delIter += 1
+        if(self.delIter == len(deliniation)):
+            self.delIter = 0
+            self.keyIter += 1
+            if(self.keyIter == len(self.keys)):
+                self.keyIter = 0
+
         return signal, isqrs
 
 
     def __len__(self):
-        return 600 # заглушка
+        return self.len
 
 
     def randCenter(self, deliniation, signal):

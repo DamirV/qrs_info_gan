@@ -7,7 +7,7 @@ class Generator(nn.Module):
     def __init__(self, entry, radius): #entry=8, radius=32
         super(Generator, self).__init__()
         self.neuronCount1 = 2 * radius + 1
-        self.neuronCount2 = self.neuronCount1 * 2  #*entry
+        self.neuronCount2 = self.neuronCount1 * 4  #*entry
         self.model = nn.Sequential(
             nn.Linear(entry, self.neuronCount1),
             nn.ReLU(),
@@ -25,14 +25,18 @@ class Discriminator(nn.Module):
     def __init__(self, radius):
         super(Discriminator, self).__init__()
         self.neuronCount1 = 2 * radius + 1
-        self.neuronCount2 = self.neuronCount1 // 2
-        self.neuronCount3 = self.neuronCount2 // 4
+        self.neuronCount2 = self.neuronCount1 // 1
+        self.neuronCount3 = self.neuronCount2 // 2
+        self.neuronCount4 = self.neuronCount2 // 4
+
         self.model = nn.Sequential(
             nn.Linear(self.neuronCount1, self.neuronCount2),
             nn.ReLU(),
             nn.Linear(self.neuronCount2, self.neuronCount3),
             nn.ReLU(),
-            nn.Linear(self.neuronCount3, 1),
+            nn.Linear(self.neuronCount3, self.neuronCount4),
+            nn.ReLU(),
+            nn.Linear(self.neuronCount4, 1),
             nn.Sigmoid())
 
 
