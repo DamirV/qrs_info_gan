@@ -3,18 +3,16 @@ from matplotlib import pyplot as plt
 import os
 
 
-def draw(y, number=0):
-    x = np.arange(0, len(y))
-    fig, ax = plt.subplots()
-    ax.plot(x, y)
-    plt.show()
-    fig.savefig(f'D:/Projects/qrs_info_gan/graphs/graph{number}.pdf')
+def makeDir(date):
+    strDate = str(f"{date.year}-{date.month}-{date.day}--{date.hour}-{date.minute}-{date.second}")
+    os.mkdir(strDate)
+    return f'D:/Projects/qrs_info_gan/graphs/{strDate}'
 
 
-class Drawer:
-    def __init__(self, figures, date):
-        self.fig = plt.figure()
-        self.date = date
+class SignalDrawer:
+    def __init__(self, figures, path, number):
+        self.fig = plt.figure(number, figsize=(8, 6))
+        self.path = path
         self.count = 0
         self.figures = figures
         self.axs = []
@@ -31,21 +29,31 @@ class Drawer:
         self.count += 1
 
 
+    def save(self):
+        self.fig.savefig(f"{self.path}/graph.pdf")
+
+
     def show(self):
-        #self.makeDir()
-        #self.fig.savefig(f'D:/Projects/qrs_info_gan/graphs/{self.strDate}/graph.pdf')
         plt.show()
 
 
+    def clear(self):
+        plt.gcf().clear()
+
+class ErrDrawer:
+    def __init__(self, path, number):
+        self.fig, self.ax = plt.subplots(number, figsize=(8, 6))
+        self.path = path
+
+
+    def add(self, y, color, label):
+        x = np.arange(0, len(y))
+        self.ax.plot(x, y, color=color, label=label)
+
+
     def save(self):
-        self.makeDir()
-        self.fig.savefig(f'D:/Projects/qrs_info_gan/graphs/{self.strDate}/graph.pdf')
+        self.fig.savefig(f"{self.path}/loss.pdf")
 
 
-    def makeDir(self):
-        os.chdir("graphs")
-        self.strDate = str(f"{self.date.year}-{self.date.month}-{self.date.day}--{self.date.hour}-{self.date.minute}-{self.date.second}")
-        os.mkdir(self.strDate)
-
-
-
+    def show(self):
+        plt.show()

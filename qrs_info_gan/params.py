@@ -1,14 +1,15 @@
 import pickle
 
+def save(pr, path):
+    serialized = pickle.dumps(pr)
+    with open(f"{path}/params.pkl", "wb") as fp:
+        pickle.dump(serialized, fp)
 
-def save(pr):
-    with open("file.pkl", "wb") as fp:
-        pickle.dump(pr, fp)
 
-
-def load():
-    with open("file.pkl", "rb") as fp:
-        return pickle.load(fp)
+def load(path):
+    with open(f"{path}/params.pkl", "rb") as fp:
+        serialized = pickle.load(fp)
+        return pickle.loads(serialized)
 
 
 class Params:
@@ -57,4 +58,15 @@ class Params:
         self.lr = state["lr"]
         self.batch_size = state["batch_size"]
 
+    def toStr(self):
+        str = f"radius = {self.radius}\n"
+        str = str + f"entry = {self.entry}\n"
+        str = str + f"num_epochs = {self.num_epochs}\n"
+        str = str + f"lr = {self.lr}\n"
+        str = str + f"batch_size = {self.batch_size}\n"
+        return str
 
+    def save(self, path):
+        my_file = open(f"{path}/params.txt", "w")
+        my_file.write(self.toStr())
+        my_file.close()

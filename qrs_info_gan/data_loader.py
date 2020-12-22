@@ -7,6 +7,12 @@ import numpy as np
 
 goodECG = '60757195'  #60757195 is good
 
+
+def cutSignal(signal, start, radius):
+    signal = signal[start-radius:start+radius+1]
+    return signal
+
+
 class QrsDataset(Dataset):
     def __init__(self, radius=32):
         self.data = self.load_data()
@@ -16,6 +22,7 @@ class QrsDataset(Dataset):
         self.len = 0
         for key in self.data:
             self.len += len(self.data[key]['Leads']['i']['Delineation']['qrs'])
+            self.len -= 2
 
         self.keys = list(self.data.keys())
         self.keyIter = 0
@@ -38,8 +45,14 @@ class QrsDataset(Dataset):
         signal = self.data[self.keys[self.keyIter]]['Leads']['i']['Signal']
         deliniation = self.data[self.keys[self.keyIter]]['Leads']['i']['Delineation']['qrs']
 
+
+
+
         isqrs = 1
         center = deliniation[self.delIter][1]
+
+        if (center - self.radius < 0) or (center + self.radius + 1 > 5000):
+            center = deliniation[3][1]
 
         signal = signal[center - self.radius:center + self.radius + 1]
         signal = np.asarray(signal, dtype=np.float32)

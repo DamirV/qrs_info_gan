@@ -1,19 +1,38 @@
+import datetime
+import logging
 from torch import nn
 import torch.nn.functional as F
 import torch
 import data_loader
+import drawer
+import params
+
+
+def saveModel(model, name, path):
+        torch.save(model.state_dict(), f"{path}/{name}.pt")
+
+
+def loadModel(model, name, path):
+        model.load_state_dict(torch.load(f"{path}/{name}.pt"))
+        model.eval()
+        return model
+
 
 class Generator(nn.Module):
     def __init__(self, entry, radius): #entry=8, radius=32
         super(Generator, self).__init__()
-        self.neuronCount1 = 2 * radius + 1
-        self.neuronCount2 = self.neuronCount1 * 4  #*entry
+        self.neuronCount1 = (2 * radius + 1) * 4
+        self.neuronCount2 = self.neuronCount1
+        self.neuronCount3 = self.neuronCount1 // 2
+
         self.model = nn.Sequential(
             nn.Linear(entry, self.neuronCount1),
             nn.ReLU(),
             nn.Linear(self.neuronCount1, self.neuronCount2),
             nn.ReLU(),
-            nn.Linear(self.neuronCount2, self.neuronCount1))
+            nn.Linear(self.neuronCount2, self.neuronCount3),
+            nn.ReLU(),
+            nn.Linear(self.neuronCount3, 2 * radius + 1))
 
 
     def forward(self, x):
@@ -25,9 +44,9 @@ class Discriminator(nn.Module):
     def __init__(self, radius):
         super(Discriminator, self).__init__()
         self.neuronCount1 = 2 * radius + 1
-        self.neuronCount2 = self.neuronCount1 // 1
+        self.neuronCount2 = self.neuronCount1 // 2
         self.neuronCount3 = self.neuronCount2 // 2
-        self.neuronCount4 = self.neuronCount2 // 4
+        self.neuronCount4 = self.neuronCount2 // 2
 
         self.model = nn.Sequential(
             nn.Linear(self.neuronCount1, self.neuronCount2),
@@ -45,97 +64,103 @@ class Discriminator(nn.Module):
         return x
 
 
-if __name__ == "main":
+def train(pr, dataset):
+    torch.manual_seed(111)
+    device = ""
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
 
-    for epoch in range(opt.n_epochs):
-        for i, (imgs, labels) in enumerate(dataloader):
+    discriminator = Discriminator(pr.radius)
+    generator = Generator(pr.entry, pr.radius)
 
-            batch_size = imgs.shape[0]
+    loss_function = nn.BCELoss()
 
-            # Adversarial ground truths
-            valid = Variable(FloatTensor(batch_size, 1).fill_(1.0), requires_grad=False)
-            fake = Variable(FloatTensor(batch_size, 1).fill_(0.0), requires_grad=False)
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=pr.lr)
+    optimizer_generator = torch.optim.Adam(generator.parameters(), lr=pr.lr)
 
-            # Configure input
-            real_imgs = Variable(imgs.type(FloatTensor))
-            labels = to_categorical(labels.numpy(), num_columns=opt.n_classes)
+    train_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=pr.batch_size, shuffle=True)
 
-            # -----------------
-            #  Train Generator
-            # -----------------
+    disLoss = []
+    genLoss = []
+    for epoch in range(pr.num_epochs):
 
-            optimizer_G.zero_grad()
+        for i, (real_samples, _) in enumerate(train_loader):
+            real_samples_labels = torch.ones((pr.batch_size, 1))
+            generated_samples_labels = torch.zeros((pr.batch_size, 1))
+            latent_space_samples = torch.randn((pr.batch_size, pr.entry))
+            generated_samples = generator(latent_space_samples)
+            all_samples = torch.cat((real_samples, generated_samples))
+            all_samples_labels = torch.cat((real_samples_labels, generated_samples_labels))
 
-            # Sample noise and labels as generator input
-            z = Variable(FloatTensor(np.random.normal(0, 1, (batch_size, opt.latent_dim))))
-            label_input = to_categorical(np.random.randint(0, opt.n_classes, batch_size), num_columns=opt.n_classes)
-            code_input = Variable(FloatTensor(np.random.uniform(-1, 1, (batch_size, opt.code_dim))))
+            # training discriminator
+            discriminator.zero_grad()
+            output_discriminator = discriminator(all_samples)
+            loss_discriminator = loss_function(output_discriminator, all_samples_labels)
+            loss_discriminator.backward()
+            optimizer_discriminator.step()
 
-            # Generate a batch of images
-            gen_imgs = generator(z, label_input, code_input)
+            # training generator
+            latent_space_samples = torch.randn((pr.batch_size, pr.entry))
+            generator.zero_grad()
+            generated_samples = generator(latent_space_samples)
+            output_discriminator_generated = discriminator(generated_samples)
+            loss_generator = loss_function(output_discriminator_generated, real_samples_labels)
+            loss_generator.backward()
+            optimizer_generator.step()
 
-            # Loss measures generator's ability to fool the discriminator
-            validity, _, _ = discriminator(gen_imgs)
-            g_loss = adversarial_loss(validity, valid)
+            print(f"Epoch: {epoch} Loss D.: {loss_discriminator}")
+            print(f"Epoch: {epoch} Loss G.: {loss_generator}")
+            print(f"Iteration: {i}")
 
-            g_loss.backward()
-            optimizer_G.step()
+            if i == train_loader.__len__() - 1:
+                genLoss.append(loss_generator.item())
+                disLoss.append(loss_discriminator.item())
 
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
+    print("success")
+    return discriminator, generator, disLoss, genLoss
 
-            optimizer_D.zero_grad()
 
-            # Loss for real images
-            real_pred, _, _ = discriminator(real_imgs)
-            d_real_loss = adversarial_loss(real_pred, valid)
+def experiment(pr):
+    now = datetime.datetime.now()
+    path = drawer.makeDir(now)
 
-            # Loss for fake images
-            fake_pred, _, _ = discriminator(gen_imgs.detach())
-            d_fake_loss = adversarial_loss(fake_pred, fake)
+    dataset = data_loader.QrsDataset(pr.radius)
+    discriminator, generator, disLoss, genLoss = train(pr, dataset)
 
-            # Total discriminator loss
-            d_loss = (d_real_loss + d_fake_loss) / 2
+    saveModel(generator, "generator", path)
+    saveModel(discriminator, "discriminator", path)
 
-            d_loss.backward()
-            optimizer_D.step()
+    errDrr = drawer.ErrDrawer(path, 1)
 
-            # ------------------
-            # Information Loss
-            # ------------------
+    errDrr.add(disLoss, "red", "dis")
+    errDrr.add(genLoss, "blue", "gen")
 
-            optimizer_info.zero_grad()
+    errDrr.save()
+    params.save(pr, path)
+    pr.save(path)
 
-            # Sample labels
-            sampled_labels = np.random.randint(0, opt.n_classes, batch_size)
+    drr = drawer.SignalDrawer(4, path, 0)
+    drr.add(dataset.getTestCenter())
 
-            # Ground truth labels
-            gt_labels = Variable(LongTensor(sampled_labels), requires_grad=False)
+    input = torch.zeros(pr.entry)
+    output = generator(input)
+    output = output.detach().numpy()
+    drr.add(output)
 
-            # Sample noise, labels and code as generator input
-            z = Variable(FloatTensor(np.random.normal(0, 1, (batch_size, opt.latent_dim))))
-            label_input = to_categorical(sampled_labels, num_columns=opt.n_classes)
-            code_input = Variable(FloatTensor(np.random.uniform(-1, 1, (batch_size, opt.code_dim))))
+    testSignal = dataset.getTestSignal()
+    drr.add(testSignal)
 
-            gen_imgs = generator(z, label_input, code_input)
-            _, pred_label, pred_code = discriminator(gen_imgs)
+    result = []
+    for i in range(pr.radius, 5000 - pr.radius - 1):
+        signal = data_loader.cutSignal(testSignal, i, pr.radius)
+        signal = torch.from_numpy(signal)
+        tempResult = discriminator(signal)
+        tempResult = tempResult.detach().numpy()
+        result.append(tempResult[0])
 
-            info_loss = lambda_cat * categorical_loss(pred_label, gt_labels) + lambda_con * continuous_loss(
-                pred_code, code_input
-            )
-
-            info_loss.backward()
-            optimizer_info.step()
-
-            # --------------
-            # Log Progress
-            # --------------
-
-            print(
-                "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [info loss: %f]"
-                % (epoch, opt.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item(), info_loss.item())
-            )
-            batches_done = epoch * len(dataloader) + i
-            if batches_done % opt.sample_interval == 0:
-                sample_image(n_row=10, batches_done=batches_done)
+    drr.add(result)
+    drr.save()
+    drr.clear()
