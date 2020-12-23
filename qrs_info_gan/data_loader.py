@@ -46,8 +46,6 @@ class QrsDataset(Dataset):
         deliniation = self.data[self.keys[self.keyIter]]['Leads']['i']['Delineation']['qrs']
 
 
-
-
         isqrs = 1
         center = deliniation[self.delIter][1]
 
@@ -99,4 +97,3 @@ class QrsDataset(Dataset):
         center = random.choice(deliniation)[1]
         signal = signal[center - self.radius:center + self.radius + 1]
         return signal
-

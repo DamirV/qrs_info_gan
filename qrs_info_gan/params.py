@@ -1,4 +1,5 @@
 import pickle
+from typing import NamedTuple
 
 def save(pr, path):
     serialized = pickle.dumps(pr)
@@ -12,34 +13,33 @@ def load(path):
         return pickle.loads(serialized)
 
 
-class Params:
-    def __init__(self, radius=16, entry=8,
-                 num_epochs=12, lr=0.001, batch_size=1):
-        self.radius = radius
-        self.entry = entry
-        self.num_epochs = num_epochs
-        self.lr = lr
-        self.batch_size = batch_size
+class Params(NamedTuple):
+    experiment_folder: str
 
+    radius: int = 128
+    entry: int = 8
+    num_epochs: int = 12
+    # params of data generator
+    step_size: int = 25  # num discrets in one step
+    max_steps_left: int = 2  # num steps from patch center, allowed for the moving complex
+    n_classes: int = 5  # number of classes for dataset
+    patch_len: int = radius*2 + 1  # size of ecg patch, need to be degree of 2
+    num_channels: int = 1  # "number of channels in ecg, no more than 12"
 
-    def setRadius(self, radius):
-        self.radius = radius
+    # params of model
+    code_dim: int = 2
+    latent_dim: int = 36
 
+    # params of training
+    lr: float = 0.0002  # adam: learning rate
+    b1: float = 0.5
+    b2: float = 0.999  # adam: decay of first order momentum of gradient
+    batch_size: int = 12
+    n_epochs: int = 2501
 
-    def setEntry(self, entry):
-        self.entry = entry
-
-
-    def setNum_epochs(self, num_epochs):
-        self.num_epochs = num_epochs
-
-
-    def setLr(self, lr):
-        self.lr = lr
-
-
-    def setBatch_size(self, batch_size):
-        self.batch_size = batch_size
+    # params of logger
+    save_pic_interval: int = 30  # in epoches
+    save_model_interval: int = 30  # in epoches
 
 
     def __getstate__(self) -> dict:
