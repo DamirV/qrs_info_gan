@@ -9,7 +9,7 @@ goodECG = '60757195'  #60757195 is good
 
 
 def cutSignal(signal, start, radius):
-    signal = signal[start-radius:start+radius+1]
+    signal = signal[start-radius:start+radius]
     return signal
 
 
@@ -45,14 +45,13 @@ class QrsDataset(Dataset):
         signal = self.data[self.keys[self.keyIter]]['Leads']['i']['Signal']
         deliniation = self.data[self.keys[self.keyIter]]['Leads']['i']['Delineation']['qrs']
 
-
         isqrs = 1
         center = deliniation[self.delIter][1]
 
-        if (center - self.radius < 0) or (center + self.radius + 1 > 5000):
+        if (center - self.radius < 0) or (center + self.radius > 5000):
             center = deliniation[3][1]
 
-        signal = signal[center - self.radius:center + self.radius + 1]
+        signal = signal[center - self.radius:center + self.radius]
         signal = np.asarray(signal, dtype=np.float32)
         isqrs = np.asarray(isqrs, dtype=np.float32)
 
@@ -66,6 +65,9 @@ class QrsDataset(Dataset):
             if(self.keyIter == len(self.keys)):
                 self.keyIter = 0
 
+        signal = signal.unsqueeze(0)
+        isqrs = isqrs.unsqueeze(0)
+
         return signal, isqrs
 
 
@@ -74,10 +76,10 @@ class QrsDataset(Dataset):
 
 
     def randCenter(self, deliniation, signal):
-        center = random.randint(self.radius, 5000 - self.radius - 1)
+        center = random.randint(self.radius, 5000 - self.radius)
 
         for i in deliniation:
-            intersection = (center > (i[1] - 2*self.radius)) and (center < (i[1] + 2*self.radius + 1))
+            intersection = (center > (i[1] - 2*self.radius)) and (center < (i[1] + 2*self.radius))
             if(intersection):
                 center = self.randCenter(deliniation, signal)
                 break
@@ -95,5 +97,5 @@ class QrsDataset(Dataset):
         signal = self.testValue['Leads']['i']['Signal']
         deliniation = self.testValue['Leads']['i']['Delineation']['qrs']
         center = random.choice(deliniation)[1]
-        signal = signal[center - self.radius:center + self.radius + 1]
+        signal = signal[center - self.radius:center + self.radius]
         return signal

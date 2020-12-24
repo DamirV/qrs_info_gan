@@ -215,7 +215,6 @@ def train(pr, dataset):
 
             optimizer_D.zero_grad()
             # Loss for real images
-            print(ecgs)
             real_pred, _, _ = discriminator(ecgs)
             d_real_loss = adversarial_loss(real_pred, valid)
 
@@ -254,7 +253,7 @@ def train(pr, dataset):
 
             print(f"Epoch: {epoch} Loss D.: {d_loss.item()}")
             print(f"Epoch: {epoch} Loss G.: {g_loss.item()}")
-            print(f"Epoch: {epoch} Loss G.: {info_loss.item()}")
+            print(f"Epoch: {epoch} Loss I.: {info_loss.item()}")
             print(f"Iteration: {i}")
 
             if i == dataloader.__len__() - 1:
@@ -271,7 +270,6 @@ def experiment(pr):
     path = drawer.makeDir(now)
 
     dataset_object = data_loader.QrsDataset(pr.radius)
-    dataset_object = dataset_creator.ECGDataset(pr.patch_len, pr.max_steps_left, pr.step_size)
     discriminator, generator, disLoss, genLoss, infoLoss = train(pr, dataset_object)
 
     saveModel(generator, "generator", path)
@@ -288,21 +286,30 @@ def experiment(pr):
     #pr.save(path)
 
     drr = drawer.SignalDrawer(4, path, 0)
-    #drr.add(dataset.getTestCenter())
+    drr.add(dataset_object.getTestCenter())
 
-    input = torch.zeros(pr.entry)
-    output = generator(input)
+    a = torch.zeros([1, 10])
+    b = torch.zeros([1, 5])
+    c = torch.zeros([1, 2])
+
+    output = generator(a, b, c)
+    output.squeeze_(0)
+    output.squeeze_(0)
     output = output.detach().numpy()
+    print(output.shape)
     drr.add(output)
 
-    #testSignal = dataset.getTestSignal()
-    #drr.add(testSignal)
+    testSignal = dataset_object.getTestSignal()
+    drr.add(testSignal)
 
     result = []
-    for i in range(pr.radius, 5000 - pr.radius - 1):
+    for i in range(pr.radius, 5000 - pr.radius):
         signal = data_loader.cutSignal(testSignal, i, pr.radius)
         signal = torch.from_numpy(signal)
+        signal = signal.unsqueeze(0)
+        signal = signal.unsqueeze(0)
         tempResult, _, _ = discriminator(signal)
+        print("tmp result: " + str(tempResult.shape))
         tempResult = tempResult.detach().numpy()
         result.append(tempResult[0])
 
