@@ -33,6 +33,10 @@ class SignalDrawer:
         self.fig.savefig(f"{self.path}/graph.pdf")
 
 
+    def save2(self):
+        self.fig.savefig(f"{self.path}/graph2.pdf")
+
+
     def show(self):
         plt.show()
 

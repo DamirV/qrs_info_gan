@@ -9,7 +9,18 @@ goodECG = '60757195'  #60757195 is good
 
 
 def cutSignal(signal, start, radius):
-    signal = signal[start-radius:start+radius]
+    signal = signal[start-radius:start + radius]
+    return signal
+
+
+def completeSignal(signal):
+    startLen = 5000 // 2 - len(signal) // 2
+    startSignal = np.zeros(startLen)
+    tempSignal = np.concatenate((startSignal, signal), axis=0)
+    endLen = 5000 - len(tempSignal)
+    endSignal = np.zeros(endLen)
+    signal = np.concatenate((tempSignal, endSignal), axis=0)
+
     return signal
 
 
@@ -45,7 +56,6 @@ class QrsDataset(Dataset):
         signal = self.data[self.keys[self.keyIter]]['Leads']['i']['Signal']
         deliniation = self.data[self.keys[self.keyIter]]['Leads']['i']['Delineation']['qrs']
 
-        isqrs = 1
         center = deliniation[self.delIter][1]
 
         if (center - self.radius < 0) or (center + self.radius > 5000):
@@ -53,11 +63,8 @@ class QrsDataset(Dataset):
 
         signal = signal[center - self.radius:center + self.radius]
         signal = np.asarray(signal, dtype=np.float32)
-        isqrs = np.asarray(isqrs, dtype=np.float32)
 
         signal = torch.from_numpy(signal)
-        isqrs = torch.from_numpy(isqrs)
-
         self.delIter += 1
         if(self.delIter == len(deliniation)):
             self.delIter = 0
@@ -66,9 +73,8 @@ class QrsDataset(Dataset):
                 self.keyIter = 0
 
         signal = signal.unsqueeze(0)
-        isqrs = isqrs.unsqueeze(0)
 
-        return signal, isqrs
+        return signal
 
 
     def __len__(self):

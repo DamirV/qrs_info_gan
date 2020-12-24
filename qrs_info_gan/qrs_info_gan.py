@@ -91,14 +91,13 @@ class Discriminator(nn.Module):
             *downscale_block(num_channels, 16, bn=False),
             *downscale_block(16, 32),
             *downscale_block(32, 64),
-            *downscale_block(64, 128),
-        )
+            *downscale_block(64, 128))
 
         # The lenght of downsampled ecg patch
         ds_len = patch_len // 2 ** 4
 
         # Output layers
-        self.adv_layer = nn.Sequential(nn.Linear(128 * ds_len, 1))
+        self.adv_layer = nn.Sequential(nn.Linear(128 * ds_len, 1), nn.Sigmoid())
         self.aux_layer = nn.Sequential(nn.Linear(128 * ds_len, n_classes), nn.Softmax())
         self.latent_layer = nn.Sequential(nn.Linear(128 * ds_len, code_dim))
 
@@ -176,16 +175,12 @@ def train(pr, dataset):
     infoLoss = []
 
     for epoch in range(pr.num_epochs):
-        for i, (ecgs, labels) in enumerate(dataloader):
+        for i, (ecgs) in enumerate(dataloader):
 
-            batch_size = ecgs.shape[0]
             # Adversarial ground truths
-            valid = Variable(FloatTensor(batch_size, 1).fill_(1.0), requires_grad=False)
-            fake = Variable(FloatTensor(batch_size, 1).fill_(0.0), requires_grad=False)
-
-            # Configure input
-            #real_ecgs = Variable(ecgs.type(FloatTensor))
-            # labels = to_categorical(labels.numpy(), num_columns=opt.n_classes)
+            batch_size = ecgs.shape[0]
+            valid = torch.ones(batch_size, 1)
+            fake = torch.zeros(batch_size, 1)
 
             # -----------------
             #  Train Generator
@@ -198,6 +193,7 @@ def train(pr, dataset):
 
             label_input_one_hot = Variable(FloatTensor(label_input_one_hot))
             code_input = Variable(FloatTensor(code_input))
+            #z = torch.from_numpy(z)
             z = Variable(FloatTensor(z))
 
             # Generate a batch of images
@@ -269,7 +265,10 @@ def experiment(pr):
     now = datetime.datetime.now()
     path = drawer.makeDir(now)
 
-    dataset_object = data_loader.QrsDataset(pr.radius)
+    with open(path + "/params.txt", "w") as text_file:
+        text_file.write(str(pr._asdict()))
+
+    dataset_object = data_loader.QrsDataset(pr.patch_len//2)
     discriminator, generator, disLoss, genLoss, infoLoss = train(pr, dataset_object)
 
     saveModel(generator, "generator", path)
@@ -282,11 +281,10 @@ def experiment(pr):
     errDrr.add(infoLoss, "green", "inf")
 
     errDrr.save()
-    #params.save(pr, path)
-    #pr.save(path)
 
     drr = drawer.SignalDrawer(4, path, 0)
-    drr.add(dataset_object.getTestCenter())
+    realqrs = data_loader.completeSignal(dataset_object.getTestCenter())
+    drr.add(realqrs)
 
     a = torch.zeros([1, 10])
     b = torch.zeros([1, 5])
@@ -296,24 +294,92 @@ def experiment(pr):
     output.squeeze_(0)
     output.squeeze_(0)
     output = output.detach().numpy()
-    print(output.shape)
-    drr.add(output)
+
+    print(np.shape(output))
+    imqrs = data_loader.completeSignal(output)
+    print(np.shape(imqrs))
+
+    drr.add(imqrs)
 
     testSignal = dataset_object.getTestSignal()
     drr.add(testSignal)
 
     result = []
-    for i in range(pr.radius, 5000 - pr.radius):
-        signal = data_loader.cutSignal(testSignal, i, pr.radius)
+    for i in range(pr.patch_len//2, 5000 - pr.patch_len//2 + 1):
+        signal = data_loader.cutSignal(testSignal, i, pr.patch_len//2)
         signal = torch.from_numpy(signal)
         signal = signal.unsqueeze(0)
         signal = signal.unsqueeze(0)
         tempResult, _, _ = discriminator(signal)
-        print("tmp result: " + str(tempResult.shape))
         tempResult = tempResult.detach().numpy()
         result.append(tempResult[0])
 
+    result = np.resize(result, (len(result),))
+    result = data_loader.completeSignal(result)
+
     drr.add(result)
     drr.save()
-    drr.show()
+    drr.clear()
+
+    drr = drawer.SignalDrawer(9, path, 2)
+    testSignal = dataset_object.getTestSignal()
+    drr.add(testSignal)
+
+    result1 = []
+    result21 = []
+    result22 = []
+    result23 = []
+    result24 = []
+    result25 = []
+    result31 = []
+    result32 = []
+    for i in range(pr.patch_len//2, 5000 - pr.patch_len//2 + 1):
+        signal = data_loader.cutSignal(testSignal, i, pr.patch_len//2)
+        signal = torch.from_numpy(signal)
+        signal = signal.unsqueeze(0)
+        signal = signal.unsqueeze(0)
+
+        tempResult1, tempResult2, tempResult3 = discriminator(signal)
+
+        tempResult1 = tempResult1.detach().numpy()
+        tempResult2 = tempResult2.detach().numpy()
+        tempResult3 = tempResult3.detach().numpy()
+        result1.append(tempResult1[0])
+        result21.append(tempResult2[0][0])
+        result22.append(tempResult2[0][1])
+        result23.append(tempResult2[0][2])
+        result24.append(tempResult2[0][3])
+        result25.append(tempResult2[0][4])
+        result31.append(tempResult3[0][0])
+        result32.append(tempResult3[0][1])
+
+
+    result1 = np.resize(result1, (len(result1),))
+    result21 = np.resize(result21, (len(result1),))
+    result22 = np.resize(result22, (len(result1),))
+    result23 = np.resize(result23, (len(result1),))
+    result24 = np.resize(result24, (len(result1),))
+    result25 = np.resize(result25, (len(result1),))
+    result31 = np.resize(result31, (len(result1),))
+    result32 = np.resize(result32, (len(result1),))
+
+    result1 = data_loader.completeSignal(result1)
+    result21 = data_loader.completeSignal(result21)
+    result22 = data_loader.completeSignal(result22)
+    result23 = data_loader.completeSignal(result23)
+    result24 = data_loader.completeSignal(result24)
+    result25 = data_loader.completeSignal(result25)
+    result31 = data_loader.completeSignal(result31)
+    result32 = data_loader.completeSignal(result32)
+
+    drr.add(result1)
+    drr.add(result21)
+    drr.add(result22)
+    drr.add(result23)
+    drr.add(result24)
+    drr.add(result25)
+    drr.add(result31)
+    drr.add(result32)
+
+    drr.save2()
     drr.clear()
