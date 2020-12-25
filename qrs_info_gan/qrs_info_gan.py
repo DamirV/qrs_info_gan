@@ -10,6 +10,9 @@ import itertools
 import numpy as np
 import dataset_creator
 
+import matplotlib.mlab as mlab
+import matplotlib.pyplot as plt
+
 def saveModel(model, name, path):
         torch.save(model.state_dict(), f"{path}/{name}.pt")
 
@@ -28,13 +31,12 @@ def to_categorical(y, num_columns):
 
 
 class Generator(nn.Module):
-    def __init__(self, latent_dim, n_classes, code_dim, patch_len, num_channels):
+    def __init__(self, latent_dim, n_classes, code_dim, patch_len):
         super(Generator, self).__init__()
 
         self.latent_dim = latent_dim
         self.n_classes = n_classes
         self.code_dim = code_dim
-        self.num_channels = num_channels
 
         input_dim = latent_dim + n_classes + code_dim
 
@@ -42,19 +44,15 @@ class Generator(nn.Module):
         self.l1 = nn.Sequential(nn.Linear(input_dim, 128 * self.init_len))
 
         self.conv_block = nn.Sequential(
-            # nn.BatchNorm1d(128),
-
             nn.Upsample(scale_factor=2, mode='linear'),
             nn.Conv1d(128, 128, 3, stride=1, padding=1),
-            # nn.BatchNorm1d(128, 0.8),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Upsample(scale_factor=2, mode='linear'),
             nn.Conv1d(128, 64, 3, stride=1, padding=1),
-            # nn.BatchNorm1d(64, 0.8),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv1d(64, num_channels, 3, stride=1, padding=1),
+            nn.Conv1d(64, 1, 3, stride=1, padding=1),
         )
 
     def forward(self, noise, labels, code):
@@ -75,8 +73,17 @@ class Generator(nn.Module):
         return z, label_input_int, label_input_one_hot, code_input
 
 
+    def generate_ecgs(self, batch_size):
+        z, _, label_input_one_hot, code_input = self.sample_input_numpy(batch_size)
+        label_input_one_hot = Variable(torch.FloatTensor(label_input_one_hot))
+        code_input = Variable(torch.FloatTensor(code_input))
+        z = Variable(torch.FloatTensor(z))
+        gen_ecgs = self.forward(z, label_input_one_hot, code_input)
+        return gen_ecgs
+
+
 class Discriminator(nn.Module):
-    def __init__(self, n_classes, code_dim, patch_len, num_channels):
+    def __init__(self, n_classes, code_dim, patch_len):
         super(Discriminator, self).__init__()
 
         def downscale_block(in_filters, out_filters, bn=False):
@@ -88,7 +95,7 @@ class Discriminator(nn.Module):
             return block
 
         self.model = nn.Sequential(
-            *downscale_block(num_channels, 16, bn=False),
+            *downscale_block(1, 16, bn=False),
             *downscale_block(16, 32),
             *downscale_block(32, 64),
             *downscale_block(64, 128))
@@ -105,11 +112,21 @@ class Discriminator(nn.Module):
     def forward(self, ecg):
         out = self.model(ecg)
         out = out.view(out.shape[0], -1)
+
+        self.latentRes = out
+
         validity = self.adv_layer(out)
         label = self.aux_layer(out)
         latent_code = self.latent_layer(out)
 
         return validity, label, latent_code
+
+
+    def getLatentRes(self):
+        m = nn.Flatten()
+        result = m(self.latentRes)
+        result = result.detach().numpy()
+        return result
 
 
 def weights_init_normal(m):
@@ -142,12 +159,10 @@ def train(pr, dataset):
     # Initialize generator and discriminator
     generator = Generator(latent_dim=pr.latent_dim,
                           n_classes=pr.n_classes, code_dim=pr.code_dim,
-                          patch_len=pr.patch_len,
-                          num_channels=pr.num_channels)
+                          patch_len=pr.patch_len)
     discriminator = Discriminator(n_classes=pr.n_classes,
                                   code_dim=pr.code_dim,
-                                  patch_len=pr.patch_len,
-                                  num_channels=pr.num_channels)
+                                  patch_len=pr.patch_len)
 
     if cuda:
         generator.cuda()
@@ -268,7 +283,7 @@ def experiment(pr):
     with open(path + "/params.txt", "w") as text_file:
         text_file.write(str(pr._asdict()))
 
-    dataset_object = data_loader.QrsDataset(pr.patch_len//2)
+    dataset_object = data_loader.QrsDataLoader(pr.patch_len//2)
     discriminator, generator, disLoss, genLoss, infoLoss = train(pr, dataset_object)
 
     saveModel(generator, "generator", path)
@@ -311,6 +326,7 @@ def experiment(pr):
         signal = signal.unsqueeze(0)
         signal = signal.unsqueeze(0)
         tempResult, _, _ = discriminator(signal)
+        discriminator.getLatentRes()
         tempResult = tempResult.detach().numpy()
         result.append(tempResult[0])
 
@@ -321,65 +337,49 @@ def experiment(pr):
     drr.save()
     drr.clear()
 
-    drr = drawer.SignalDrawer(9, path, 2)
-    testSignal = dataset_object.getTestSignal()
-    drr.add(testSignal)
 
-    result1 = []
-    result21 = []
-    result22 = []
-    result23 = []
-    result24 = []
-    result25 = []
-    result31 = []
-    result32 = []
-    for i in range(pr.patch_len//2, 5000 - pr.patch_len//2 + 1):
-        signal = data_loader.cutSignal(testSignal, i, pr.patch_len//2)
-        signal = torch.from_numpy(signal)
-        signal = signal.unsqueeze(0)
-        signal = signal.unsqueeze(0)
-
-        tempResult1, tempResult2, tempResult3 = discriminator(signal)
-
-        tempResult1 = tempResult1.detach().numpy()
-        tempResult2 = tempResult2.detach().numpy()
-        tempResult3 = tempResult3.detach().numpy()
-        result1.append(tempResult1[0])
-        result21.append(tempResult2[0][0])
-        result22.append(tempResult2[0][1])
-        result23.append(tempResult2[0][2])
-        result24.append(tempResult2[0][3])
-        result25.append(tempResult2[0][4])
-        result31.append(tempResult3[0][0])
-        result32.append(tempResult3[0][1])
+    batch_size = 1500
+    gen_ecgs = generator.generate_ecgs(batch_size)
+    generator = Generator(latent_dim=pr.latent_dim,
+                          n_classes=pr.n_classes, code_dim=pr.code_dim,
+                          patch_len=pr.patch_len)
+    generator.apply(weights_init_normal)
+    gen_not_ecgs = generator.generate_ecgs(batch_size)
 
 
-    result1 = np.resize(result1, (len(result1),))
-    result21 = np.resize(result21, (len(result1),))
-    result22 = np.resize(result22, (len(result1),))
-    result23 = np.resize(result23, (len(result1),))
-    result24 = np.resize(result24, (len(result1),))
-    result25 = np.resize(result25, (len(result1),))
-    result31 = np.resize(result31, (len(result1),))
-    result32 = np.resize(result32, (len(result1),))
+    discriminator(gen_ecgs)
+    results = discriminator.getLatentRes()
+    results = results.flatten()
+    num_bins = 500
+    n, bins, patches = plt.hist(results, num_bins, facecolor='blue')
+    plt.show()
+    plt.gcf().clear()
 
-    result1 = data_loader.completeSignal(result1)
-    result21 = data_loader.completeSignal(result21)
-    result22 = data_loader.completeSignal(result22)
-    result23 = data_loader.completeSignal(result23)
-    result24 = data_loader.completeSignal(result24)
-    result25 = data_loader.completeSignal(result25)
-    result31 = data_loader.completeSignal(result31)
-    result32 = data_loader.completeSignal(result32)
 
-    drr.add(result1)
-    drr.add(result21)
-    drr.add(result22)
-    drr.add(result23)
-    drr.add(result24)
-    drr.add(result25)
-    drr.add(result31)
-    drr.add(result32)
+    discriminator(gen_not_ecgs)
+    results = discriminator.getLatentRes()
+    results = results.flatten()
+    num_bins = 500
+    n, bins, patches = plt.hist(results, num_bins, facecolor='blue')
+    plt.show()
+    plt.gcf().clear()
 
-    drr.save2()
-    drr.clear()
+    discriminator = Discriminator(n_classes=pr.n_classes,
+                                  code_dim=pr.code_dim,
+                                  patch_len=pr.patch_len)
+    discriminator.apply(weights_init_normal)
+
+    discriminator(gen_ecgs)
+    results = discriminator.getLatentRes()
+    results = results.flatten()
+    num_bins = 500
+    n, bins, patches = plt.hist(results, num_bins, facecolor='blue')
+    plt.show()
+    plt.gcf().clear()
+
+    discriminator(gen_not_ecgs)
+    results = discriminator.getLatentRes()
+    results = results.flatten()
+    num_bins = 500
+    n, bins, patches = plt.hist(results, num_bins, facecolor='blue')
+    plt.show()

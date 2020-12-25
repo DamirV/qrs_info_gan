@@ -24,7 +24,7 @@ def completeSignal(signal):
     return signal
 
 
-class QrsDataset(Dataset):
+class QrsDataLoader(Dataset):
     def __init__(self, radius=32):
         self.data = self.load_data()
         self.testValue = self.data[goodECG]
@@ -105,3 +105,31 @@ class QrsDataset(Dataset):
         center = random.choice(deliniation)[1]
         signal = signal[center - self.radius:center + self.radius]
         return signal
+
+
+    def getRandomSignal(self):
+        key, value = random.choice(list(self.data.items()))
+        signal = value['Leads']['i']['Signal']
+
+        deliniation = value['Leads']['i']['Delineation']['qrs']
+
+        center = random.randint(self.radius, 5000 - self.radius)
+
+        for i in range(len(deliniation)):
+            if abs(center - deliniation[i][1]) < 50:
+                return self.getRandomSignal()
+
+        signal = signal[center - self.radius:center + self.radius]
+
+        signal = torch.from_numpy(signal)
+        signal = signal.unsqueeze(0)
+        return signal
+
+    def getNotQrs(self, batch_size):
+        mas = []
+
+        for i in range(batch_size):
+            mas.append(self.getRandomSignal())
+
+        mas = torch.from_numpy(mas)
+        return mas

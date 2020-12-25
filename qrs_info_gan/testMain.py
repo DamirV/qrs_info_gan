@@ -1,19 +1,23 @@
 import torch
-import numpy as np
+import qrs_info_gan
+import params
 
-a = []
-a.append([1])
-a.append([2])
-a.append([3])
-print(a)
-print(np.shape(a))
+path = "D:/Projects/qrs_info_gan/graphs/2020-12-25--13-19-22"
+pr = params.Params("1", batch_size=16, code_dim=2, latent_dim=10, num_epochs=10, patch_len=256)
 
-a = np.resize(a, (len(a),))
-print(a)
-print(np.shape(a))
+generator = qrs_info_gan.Generator(latent_dim=pr.latent_dim,
+                                    n_classes=pr.n_classes, code_dim=pr.code_dim,
+                                    patch_len=pr.patch_len)
+
+discriminator = qrs_info_gan.Discriminator(n_classes=pr.n_classes,
+                                            code_dim=pr.code_dim,
+                                            patch_len=pr.patch_len)
 
 
-a = np.asarray(a)
-print(a)
-print(np.shape(a))
+discriminator = qrs_info_gan.loadModel(discriminator, "discriminator", path)
+generator = qrs_info_gan.loadModel(generator, "generator", path)
+
+print(discriminator)
+print("---------------")
+print(generator)
 
